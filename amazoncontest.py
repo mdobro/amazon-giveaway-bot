@@ -15,10 +15,11 @@ import pickle
 USED_URL_FILE_NAME='entered_giveaways'
 
 loading_thread_count = 5
-thread_count = 5
-max_page_count = 1
+thread_count = 6
+max_page_count = 30
 current_page_number = 0
-rescan_same_pages_on_completion = False
+max_page_number = 200
+rescan_same_pages_on_completion = True
 
 def get_intersection(first_list, second_list):
     in_first = set(first_list)
@@ -36,7 +37,7 @@ def remove_second_list_from_first(first_list, second_list):
 
 def async_get_page_url(amazon_url):
     #Waits some time
-    random_time = randint(0, 1)
+    random_time = randint(1, 2)
     time.sleep(random_time)
     return_items = []
     try:
@@ -78,23 +79,23 @@ def gather_page_urls(url_list):
     filtered_list = []
     with open(USED_URL_FILE_NAME, 'rb') as used_urls_file:
         all_used_urls = pickle.load(used_urls_file)
-        print(all_used_urls)
+        print("Number of entered giveaways: "+str(len(all_used_urls)))
         filtered_list = remove_second_list_from_first(flat_item_urls_list, all_used_urls)
         used_urls_file.close()
     return filtered_list
 
 def write_to_log(txt):
+    #TODO: make async
     print(txt)
     with open('run_log', 'a') as f:
         f.write(txt + '\n')
 
 def write_to_entered_giveaways(url):
+    #TODO: make async
     #Write all used urls to disk
-    print("writing to entered_giveaways")
     all_used_urls = []
     all_used_urls = get_intersection([url], pickle.load(open(USED_URL_FILE_NAME, 'rb')))
     pickle.dump(all_used_urls, open(USED_URL_FILE_NAME, 'wb'))
-    print(pickle.load(open(USED_URL_FILE_NAME, 'rb')))
 
 def run(item_number, link, user_email, user_password, first_name):
     #Print the item number
@@ -215,21 +216,12 @@ def run(item_number, link, user_email, user_password, first_name):
         output_string += "\n" + "Could not find winning status"
 
     #Check if you won the prize
-    if did_you_win == first_name+", you won!":
+    try:
+        claim_prize = browser.find_element_by_name('ShipMyPrize')
+        claim_prize.click()
         output_string += "\n" + "******** You've won! ********"
-        try:
-            claim_prize = browser.find_element_by_name('ShipMyPrize')
-            claim_prize.click()
-        except:
-            console.log('Error finding ship button')
-
-        random_time = randint(2,4)
-        time.sleep(random_time)
-    elif did_you_win == first_name+", your entry has been received":
-        output_string += "\n" + 'This contest will select a winner later. If you won, you will notified via email.'
-    else:
-        output_string += "\n" + 'You did not win :/'
-        #Close the firefox window
+    except:
+        output_string += "\n" + "You didn't win."
 
     browser.quit()
     write_to_log (output_string)
@@ -258,6 +250,11 @@ def enter_contest(email, password, name):
         url_list.append(amazon_url)
         page_count += 1
     current_page_number += page_count
+
+    #cap page number
+    if (current_page_number > max_page_number):
+        #start over
+        current_page_number = 0
 
     #Goes to each Page URL and gathers all the prize URLs and puts them into the list item_urls_list
     item_urls_list = gather_page_urls(url_list)
